@@ -2,27 +2,31 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import requests
 import json
+import os
 
 app = Flask(__name__)
-CORS(app)
 
-API_KEY = "RGAPI-f1c56e09-4dc6-45a1-80ec-1a8370772a8b"  # Replace with your key
+CORS(app, resources={r"/api/*": {"origins": "https://lawrp.github.io"}})
 
-# Fetch the latest Data Dragon version
+API_KEY = os.getenv("RIOT_API_KEY")
+
 def get_ddragon_version():
     try:
         version_url = "https://ddragon.leagueoflegends.com/api/versions.json"
         version_response = requests.get(version_url)
         version_data = version_response.json()
-        return version_data[0]  # First item is the latest version
+        return version_data[0]
     except Exception as e:
         print(f"Data Dragon version fetch error: {str(e)}")
-        return "14.19.1"  # Fallback version
+        return "14.19.1"
 
 DD_VERSION = get_ddragon_version()
 
 @app.route('/api/login', methods=['POST'])
 def login():
+    if not API_KEY:
+        return jsonify({'error': 'Riot API key not configured.'}), 500
+
     data = request.get_json()
     print(f"Received request data: {data}")
     riot_id = data.get('riotId') if data else None
@@ -34,7 +38,6 @@ def login():
     game_name, tag_line = riot_id.split('#')
     print(f"Parsed game_name: {game_name}, tag_line: {tag_line}")
 
-    # Fetch account data
     account_url = f"https://americas.api.riotgames.com/riot/account/v1/accounts/by-riot-id/{game_name}/{tag_line}?api_key={API_KEY}"
     try:
         account_response = requests.get(account_url)
@@ -47,7 +50,6 @@ def login():
         print(f"Account fetch error: {str(e)}")
         return jsonify({'error': 'Connection error during account fetch.'}), 500
 
-    # Fetch summoner data
     summoner_url = f"https://na1.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/{puuid}?api_key={API_KEY}"
     try:
         summoner_response = requests.get(summoner_url)
@@ -61,7 +63,6 @@ def login():
         print(f"Summoner fetch error: {str(e)}")
         return jsonify({'error': 'Connection error during summoner fetch.'}), 500
 
-    # Fetch challenge data
     challenges_url = f"https://na1.api.riotgames.com/lol/challenges/v1/player-data/{puuid}?api_key={API_KEY}"
     try:
         challenge_response = requests.get(challenges_url)
@@ -85,6 +86,9 @@ def login():
 
 @app.route('/api/match-history/<puuid>', methods=['GET'])
 def get_match_history(puuid):
+    if not API_KEY:
+        return jsonify({'error': 'Riot API key not configured.'}), 500
+
     match_url = f"https://americas.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?start=0&count=5&api_key={API_KEY}"
     try:
         match_response = requests.get(match_url)
@@ -114,7 +118,6 @@ def get_champions():
             print(f"Champions API error: {champions_data}")
             return jsonify({'error': 'Failed to fetch champions.', 'details': champions_data}), 400
         
-        # Transform the data into a list of champions
         champion_list = [
             {
                 'id': champ_id,
@@ -130,6 +133,9 @@ def get_champions():
 
 @app.route('/api/challenges/config', methods=['GET'])
 def get_challenge_config():
+    if not API_KEY:
+        return jsonify({'error': 'Riot API key not configured.'}), 500
+
     config_url = f"https://na1.api.riotgames.com/lol/challenges/v1/challenges/config?api_key={API_KEY}"
     try:
         config_response = requests.get(config_url)
@@ -159,4 +165,6 @@ def get_ddragon_version():
         return jsonify({'error': 'Connection error during Data Dragon version fetch.'}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    # Use the PORT environment variable provided by Render, default to 5000 for local development
+    port = int(os.getenv("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False)
